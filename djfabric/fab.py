@@ -1,4 +1,4 @@
-
+import os
 import sys
 import environ
 
@@ -8,6 +8,20 @@ from fabric.api import env, run, local, sudo, cd, prefix, get, put
 from contextlib import contextmanager
 
 
+__all__ = [
+    'pull',
+    'deploy',
+    'restart',
+    'dump_db',
+    'fetch_db',
+    'fetch_media',
+    'setup',
+    'upload_env',
+    'cert',
+    'nginx_conf',
+    'supervisor_conf',
+    'unfold_to_server'
+]
 config = environ.Env()
 _STORAGE = {}
 
@@ -97,6 +111,139 @@ def upload_env():
         '/home/dev/sites/{}/{}/.env'.format(
             config('DOMAIN'), config('PROJECT_NAME'))
     )
+
+
+def cert():
+    sudo(f"sudo certbot certonly --webroot -d {config('DOMAIN')} -w /var/www/html")
+
+
+def _get_tmp_dir():
+    tmp_dir = join(env.project_dir, 'tmp')
+    os.makedirs(tmp_dir, exist_ok=True)
+    return tmp_dir
+
+
+def _write_file(tmp_file_path, lines, params):
+    with open(tmp_file_path, 'w') as file:
+        file.write("\n".join([line % params for line in lines]))
+
+
+def nginx_conf():
+    tmp_dir = _get_tmp_dir()
+    project_name = config('PROJECT_NAME')
+    tmp_file_path = join(tmp_dir, project_name)
+
+    _write_file(
+        tmp_file_path=tmp_file_path,
+        lines=[
+            "server {",
+            "    listen 80;",
+            "    server_name %(domain)s www.%(domain)s;",
+            "    return 301 https://%(domain)s$request_uri;",
+            "}",
+            "server {",
+            "    server_name %(domain)s;",
+            "    listen 443 ssl http2;",
+            "",
+            "    ssl_ciphers 'ECDHE-RSA-AES128-GCM-SHA256:AES256+EECDH:AES256+EDH';",
+            "",
+            "    ssl_certificate /etc/letsencrypt/live/%(domain)s/fullchain.pem;",
+            "    ssl_certificate_key /etc/letsencrypt/live/%(domain)s/privkey.pem;",
+            "    ssl_trusted_certificate /etc/letsencrypt/live/%(domain)s/chain.pem;",
+            "",
+            "    client_max_body_size 4G;",
+            "    ssl_stapling on;",
+            "    ssl_stapling_verify on;",
+            "",
+            '    add_header Strict-Transport-Security "max-age=31536000";',
+            '    add_header X-Frame-Options "SAMEORIGIN";',
+            "",
+            "    location / {",
+            "        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;",
+            "        proxy_set_header X-Forwarded-Proto https;",
+            "        proxy_set_header Host $host;",
+            "        proxy_redirect off;",
+            "        proxy_pass http://unix:/home/dev/sites/%(domain)s/%(project_name)s/%(project_name)s.sock;",
+            "    }",
+            "",
+            "    location /static/ {",
+            "        root /home/dev/sites/%(domain)s/public;",
+            "        expires 30d;",
+            "    }",
+            "    location /media/ {",
+            "        root /home/dev/sites/%(domain)s/public;",
+            "        expires 30d;",
+            "    }",
+            "    location /.well-known {",
+            "        root /var/www/html;",
+            "    }",
+            "    location /robots.txt {",
+            "        alias /home/dev/sites/%(domain)s/public/robots.txt;",
+            "    }",
+            "}"
+        ],
+        params={
+            "domain": config("DOMAIN"),
+            "project_name": project_name,
+        }
+    )
+
+    put(
+        tmp_file_path,
+        f"/etc/nginx/sites-available/{project_name}",
+        use_sudo=True
+    )
+
+    sudo(f"sudo ln -s /etc/nginx/sites-available/{project_name} /etc/nginx/sites-enabled")
+    sudo("sudo nginx -t")
+    sudo("sudo systemctl restart nginx")
+
+
+def supervisor_conf():
+    tmp_dir = _get_tmp_dir()
+    tmp_file_path = join(tmp_dir, config('PROJECT_NAME') + ".conf")
+    _write_file(
+        tmp_file_path=tmp_file_path,
+        lines=[
+            "[program:%(project_name)s]",
+            "command=bash /home/dev/runsite.bash -d %(domain)s -n %(project_name)s -w 3 -s core.settings",
+            "user=dev",
+            "stdout_logfile=/home/dev/sites/%(domain)s/logs/supervisor.log",
+            "autostart=True",
+            "autorestart=true",
+            "redirect_stderr=true"
+        ],
+        params={
+            "domain": config("DOMAIN"),
+            "project_name": config('PROJECT_NAME'),
+        }
+    )
+    put(
+        tmp_file_path,
+        "/etc/supervisor/conf.d",
+        use_sudo=True
+    )
+
+    sudo("sudo supervisorctl reread")
+    sudo("sudo supervisorctl update")
+
+
+def unfold_to_server():
+    site_dir = f"/home/dev/sites/{config('DOMAIN')}"
+    run(f"mkdir -p {join(site_dir, 'public', 'static')}")
+    run(f"mkdir -p {join(site_dir, 'public', 'media')}")
+    run(f"mkdir -p {join(site_dir, 'logs')}")
+    sudo(f"sudo chmod -R 775 {join(site_dir, 'public')}")
+
+    run(f"git clone git@github.com:pmaigutyak/{config('PROJECT_NAME')}.git {join(site_dir, config('PROJECT_NAME'))}")
+
+    run(f"virtualenv {join(site_dir, 'env')} --python=/usr/bin/python3.8")
+    run(f"ln -s {join(site_dir, 'env', 'bin', 'activate')} /home/dev/{config('PROJECT_NAME')}env")
+    run(f"ln -s {join(site_dir, config('PROJECT_NAME'))} {config('PROJECT_NAME')}")
+
+    upload_env()
+    supervisor_conf()
+    nginx_conf()
 
 
 def fetch_media():
