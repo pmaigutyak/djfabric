@@ -19,6 +19,7 @@ __all__ = [
     'upload_env',
     'cert',
     'nginx_conf',
+    'restart_nginx',
     'supervisor_conf',
     'unfold_to_server',
     'upload_db',
@@ -75,6 +76,7 @@ def dump_db():
     get(file_path, file_path)
 
     return file_path
+
 
 def fetch_db():
     file_path = dump_db()
@@ -146,7 +148,7 @@ def upload_env():
 def cert():
     sudo(f"sudo certbot certonly --webroot -d {config('DOMAIN')} -w /var/www/html")
     sudo("sudo nginx -t")
-    sudo("sudo systemctl restart nginx")
+    restart_nginx()
 
 
 def _get_tmp_dir():
@@ -227,6 +229,10 @@ def nginx_conf():
     )
 
     sudo(f"sudo ln -s /etc/nginx/sites-available/{project_name} /etc/nginx/sites-enabled")
+    restart_nginx()
+
+
+def restart_nginx():
     sudo("sudo nginx -t")
     sudo("sudo systemctl restart nginx")
 
