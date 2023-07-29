@@ -239,9 +239,9 @@ def restart_nginx():
 
 def supervisor_conf():
     tmp_dir = _get_tmp_dir()
-    tmp_file_path = join(tmp_dir, config('PROJECT_NAME') + ".conf")
+    runsite_tmp_file_path = join(tmp_dir, config('PROJECT_NAME') + ".conf")
     _write_file(
-        tmp_file_path=tmp_file_path,
+        tmp_file_path=runsite_tmp_file_path,
         lines=[
             "[program:%(project_name)s]",
             "command=bash /home/dev/runsite.bash -d %(domain)s -n %(project_name)s -w 3 -s core.settings",
@@ -257,10 +257,62 @@ def supervisor_conf():
         }
     )
     put(
-        tmp_file_path,
+        runsite_tmp_file_path,
         "/etc/supervisor/conf.d",
         use_sudo=True
     )
+
+    if config('CELERY') == 'on':
+        celery_tmp_file_path = join(tmp_dir, config('PROJECT_NAME') + "-celery.conf")
+        _write_file(
+            tmp_file_path=celery_tmp_file_path,
+            lines=[
+                "[program:%(project_name)s_celery]",
+                "command=/home/dev/sites/%(domain)s/env/bin/celery -A core worker --loglevel=INFO --concurrency=10 %(worker)s --uid=1000",
+                "directory=/home/dev/sites/%(domain)s/%(project_name)s",
+                "autostart=true",
+                "autorestart=true",
+                "numprocs=1",
+                "stderr_logfile=/home/dev/sites/%(domain)s/logs/celery.err.log",
+                "stdout_logfile=/home/dev/sites/%(domain)s/logs/celery.out.log",
+                "startsecs=10",
+                "priority=1000"
+            ],
+            params={
+                "domain": config("DOMAIN"),
+                "project_name": config('PROJECT_NAME'),
+                "worker": "-n worker1.%%h"
+            }
+        )
+        put(
+            celery_tmp_file_path,
+            "/etc/supervisor/conf.d",
+            use_sudo=True
+        )
+
+        celery_beat_tmp_file_path = join(tmp_dir, config('PROJECT_NAME') + "-celery-beat.conf")
+        _write_file(
+            tmp_file_path=celery_beat_tmp_file_path,
+            lines=[
+                "[program:%(project_name)s_celery_beat]",
+                "command=/home/dev/sites/%(domain)s/env/bin/celery -A core beat --max-interval=7200 --loglevel=INFO",
+                "directory=/home/dev/sites/%(domain)s/%(project_name)s",
+                "autostart=true",
+                "autorestart=true",
+                "numprocs=1",
+                "startsecs=10",
+                "priority=1000"
+            ],
+            params={
+                "domain": config("DOMAIN"),
+                "project_name": config('PROJECT_NAME'),
+            }
+        )
+        put(
+            celery_beat_tmp_file_path,
+            "/etc/supervisor/conf.d",
+            use_sudo=True
+        )
 
     sudo("sudo supervisorctl reread")
     sudo("sudo supervisorctl update")
