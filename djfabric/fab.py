@@ -20,7 +20,9 @@ __all__ = [
     'cert',
     'nginx_conf',
     'supervisor_conf',
-    'unfold_to_server'
+    'unfold_to_server',
+    'upload_db',
+    'push_db',
 ]
 config = environ.Env()
 _STORAGE = {}
@@ -74,7 +76,6 @@ def dump_db():
 
     return file_path
 
-
 def fetch_db():
     file_path = dump_db()
 
@@ -87,6 +88,35 @@ def fetch_db():
     ))
 
     local('sudo -u postgres psql -d {} -f {}'.format(
+        config('DB_NAME'),
+        file_path
+    ))
+
+    run('rm {}'.format(file_path))
+    local('rm {}'.format(file_path))
+
+
+def upload_db():
+    file_path = '/home/dev/{}_{}.sql'.format(
+        config('DB_NAME'),
+        datetime.now().strftime("%m-%d-%Y_%H-%M-%S")
+    )
+
+    local('pg_dump {} > {}'.format(config('DB_NAME'), file_path))
+
+    put(file_path, file_path)
+
+    return file_path
+
+
+def push_db():
+    file_path = upload_db()
+
+    run('sudo -u postgres psql -c "CREATE DATABASE {};"'.format(
+        config('DB_NAME')
+    ))
+
+    run('sudo -u postgres psql -d {} -f {}'.format(
         config('DB_NAME'),
         file_path
     ))
@@ -115,6 +145,8 @@ def upload_env():
 
 def cert():
     sudo(f"sudo certbot certonly --webroot -d {config('DOMAIN')} -w /var/www/html")
+    sudo("sudo nginx -t")
+    sudo("sudo systemctl restart nginx")
 
 
 def _get_tmp_dir():
@@ -243,6 +275,7 @@ def unfold_to_server():
 
     upload_env()
     supervisor_conf()
+    cert()
     nginx_conf()
 
 
