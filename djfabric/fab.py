@@ -24,7 +24,9 @@ __all__ = [
     'unfold_to_server',
     'upload_db',
     'push_db',
+    'clean_thumbnail',
 ]
+
 config = environ.Env()
 _STORAGE = {}
 
@@ -356,3 +358,13 @@ def fetch_media():
             join(remote_media_dir, dir_name),
             local_media_dir
         ))
+
+
+def clean_thumbnail():
+    with cd('~/sites/{}/{}/'.format(config('DOMAIN'), config('PROJECT_NAME'))):
+        pull()
+
+        with source():
+            run('python manage.py thumbnail clear_delete_all')
+
+    restart()
