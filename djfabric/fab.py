@@ -283,7 +283,7 @@ def supervisor_conf():
             params={
                 "domain": config("DOMAIN"),
                 "project_name": config('PROJECT_NAME'),
-                "worker": "-n worker1.%%h"
+                "worker": "-n worker1@" + config("DOMAIN")
             }
         )
         put(
