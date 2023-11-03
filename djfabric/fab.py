@@ -49,7 +49,7 @@ def deploy():
             run('pip install -r ./requirements.txt')
             run('python manage.py migrate')
             run('python manage.py collectstatic --noinput')
-            run('python manage.py sync_translation_fields --noinput')
+            run('python manage.py sync_translation_fields --noinput', quiet=True)
 
     restart()
 
