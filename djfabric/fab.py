@@ -220,7 +220,7 @@ def upload_env():
 
 def cert():
     sudo(
-        f"sudo certbot certonly --webroot -d {config('DOMAIN')} -w /var/www/html"
+        f"sudo certbot certonly --webroot -d {config('DOMAIN')} -w /var/www/html --force-renewal"
     )
     sudo("sudo nginx -t")
     restart_nginx()
