@@ -43,5 +43,5 @@ Traceback (most recent call last):
 do:
 ```
 pip uninstall pycryptodome
-pip install pycryptodome==3.18.0
+pip install pycryptodome==3.19.1
 ```
