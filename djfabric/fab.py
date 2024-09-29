@@ -19,6 +19,7 @@ __all__ = [
     "setup",
     "upload_env",
     "cert",
+    "robots_conf",
     "nginx_conf",
     "restart_nginx",
     "supervisor_conf",
@@ -264,6 +265,7 @@ def nginx_conf():
             "    ssl_stapling_verify on;",
             "",
             '    add_header Strict-Transport-Security "max-age=31536000";',
+            '    add_header Cross-Origin-Opener-Policy "same-origin-allow-popups" always;',
             '    add_header X-Frame-Options "SAMEORIGIN";',
             "",
             "    location / {",
@@ -386,6 +388,59 @@ def supervisor_conf():
     sudo("sudo supervisorctl update")
 
 
+def robots_conf():
+    tmp_dir = _get_tmp_dir()
+    tmp_file_path = join(tmp_dir, "robots.txt")
+    _write_file(
+        tmp_file_path=tmp_file_path,
+        lines=[
+            "User-agent: *",
+            "Allow: /",
+            "",
+            "Host: https://%(domain)s",
+            "Sitemap: https://%(domain)s/sitemap.xml",
+            "",
+            "User-agent: Yahoo",
+            "Disallow: /",
+            "",
+            "User-agent: MJ12bot",
+            "Disallow: /",
+            "",
+            "User-agent: AhrefsBot",
+            "Disallow: /",
+            "",
+            "User-agent: Baiduspider",
+            "Disallow: /",
+            "",
+            "User-agent: BLEXBot",
+            "Disallow: /",
+            "",
+            "User-agent: EmailCollector",
+            "Disallow: /",
+            "",
+            "User-agent: EmailSiphon",
+            "Disallow: /",
+            "",
+            "User-agent: PetalBot",
+            "Disallow: /",
+            "",
+            "User-agent: ALittle Client",
+            "Disallow: /",
+            "",
+            "User-agent: SemrushBot",
+            "Disallow: /",
+        ],
+        params={
+            "domain": config("DOMAIN"),
+        },
+    )
+    put(
+        tmp_file_path,
+        f"/home/dev/sites/{config('DOMAIN')}/public/robots.txt",
+        use_sudo=True,
+    )
+
+
 def unfold_to_server():
     site_dir = f"/home/dev/sites/{config('DOMAIN')}"
     run(f"mkdir -p {join(site_dir, 'public', 'static')}")
@@ -397,7 +452,7 @@ def unfold_to_server():
         f"git clone git@github.com:pmaigutyak/{config('PROJECT_NAME')}.git {join(site_dir, config('PROJECT_NAME'))}"
     )
 
-    run(f"virtualenv {join(site_dir, 'env')} --python=/usr/bin/python3.8")
+    run(f"virtualenv {join(site_dir, 'env')} --python=/usr/bin/python3.10")
     run(
         f"ln -s {join(site_dir, 'env', 'bin', 'activate')} /home/dev/{config('PROJECT_NAME')}env"
     )
@@ -406,6 +461,7 @@ def unfold_to_server():
     )
 
     upload_env()
+    robots_conf()
     supervisor_conf()
     cert()
     nginx_conf()
