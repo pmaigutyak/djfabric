@@ -17,7 +17,7 @@ CELERY=off
 ```fabfile.py``` example:
 ```
 
-from djfabric.fab import setup, restart, deploy
+from djfabric.fab import *
 
 setup()
 
